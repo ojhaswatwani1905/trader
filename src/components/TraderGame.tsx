@@ -36,6 +36,16 @@ export const TraderGame: React.FC<TraderGameProps> = ({ forceEmbedded }) => {
     toggleSound,
   } = useTraderGame({ forceEmbedded });
 
+  // Client keepalive: touches /api/health to keep Render free instance active
+  React.useEffect(() => {
+    const pingHealth = () => {
+      fetch('/api/health').catch(() => {});
+    };
+    pingHealth();
+    const keeperInterval = setInterval(pingHealth, 4 * 60 * 1000); // ping every 4 mins
+    return () => clearInterval(keeperInterval);
+  }, []);
+
   return (
     <div
       className={`w-full flex flex-col bg-[#090C13] select-none text-white font-sans overflow-hidden ${
