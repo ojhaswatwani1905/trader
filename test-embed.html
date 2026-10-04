@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BETADRiX Host Simulator & Test Harness</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #0e1424;
+      --border: #1e293b;
+      --accent-red: #ef4444;
+      --accent-green: #10b981;
+      --accent-blue: #3b82f6;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 16px;
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 12px 20px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-host { background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; }
+    .badge-green { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
+    .badge-red { background: #7f1d1d; color: #fca5a5; border: 1px solid #dc2626; }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 440px;
+      gap: 16px;
+      height: calc(100vh - 110px);
+    }
+    @media (max-width: 1024px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+    }
+    .iframe-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .iframe-panel header {
+      border-radius: 0;
+      border-bottom: 1px solid var(--border);
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      margin: 0;
+      background: #0b101d;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      min-height: 600px;
+      border: none;
+      background: #07090e;
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 14px;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-val {
+      font-family: monospace;
+      font-weight: 700;
+      color: var(--accent-green);
+      font-size: 16px;
+    }
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: #1e293b;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+    button:hover { background: #334155; }
+    button.btn-primary { background: #dc2626; border-color: #ef4444; color: white; }
+    button.btn-primary:hover { background: #b91c1c; }
+    button.btn-success { background: #059669; border-color: #10b981; color: white; }
+    button.btn-success:hover { background: #047857; }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+    .log-stream {
+      background: #050811;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      height: 280px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .log-entry {
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: #0d1220;
+      border-left: 3px solid #64748b;
+      word-break: break-all;
+    }
+    .log-entry.inbound {
+      border-left-color: #38bdf8;
+      background: #0b192e;
+    }
+    .log-entry.outbound {
+      border-left-color: #34d399;
+      background: #081d1a;
+    }
+    .log-entry.warn {
+      border-left-color: #f59e0b;
+      background: #241604;
+    }
+    .log-entry.error {
+      border-left-color: #ef4444;
+      background: #240808;
+    }
+    .log-time { color: #64748b; margin-right: 6px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span class="badge badge-host">BETADRiX Host Simulator</span>
+      <h2 style="font-size: 16px;">Authoritative Wallet & Test Harness</h2>
+    </div>
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <div style="font-size: 13px; color: var(--text-muted);">
+        Authoritative Balance: <span id="headerBalance" class="stat-val">$1,250.00</span>
+      </div>
+      <span id="connStatus" class="badge badge-red">DISCONNECTED</span>
+    </div>
+  </header>
+
+  <div class="main-grid">
+    <!-- Embed Iframe Panel -->
+    <div class="iframe-panel">
+      <header>
+        <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Embedded Trader (/embed)</span>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="reloadIframe()">Reload Iframe</button>
+        </div>
+      </header>
+      <iframe id="traderFrame" src="/embed"></iframe>
+    </div>
+
+    <!-- Right Sidebar: Wallet State, Ledger & Tests -->
+    <div class="sidebar">
+      <!-- Authoritative Wallet State Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>Authoritative Host Wallet</span>
+          <span style="font-size: 10px; color: var(--accent-green);">SINGLE SOURCE OF TRUTH</span>
+        </div>
+        <div class="stat-row">
+          <span>Host Balance:</span>
+          <span id="hostBalance" class="stat-val">$1,250.00</span>
+        </div>
+        <div class="stat-row">
+          <span>Active Wagers:</span>
+          <span id="activeWagers" style="font-family: monospace; font-weight: 700; color: #38bdf8;">0</span>
+        </div>
+        <div class="stat-row">
+          <span>Settled Transactions:</span>
+          <span id="settledCount" style="font-family: monospace; font-weight: 700;">0</span>
+        </div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="autoAcceptBets" checked>
+          <span>Auto-Accept Bet Requests</span>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="simulateReject">
+          <span style="color: #fca5a5;">Simulate Rejection (Insufficient Balance)</span>
+        </label>
+
+        <div class="btn-group">
+          <button class="btn-success" onclick="sendInit(1250)">Send Init ($1,250)</button>
+          <button onclick="sendBalanceUpdate(100)">+ $100 Bonus</button>
+          <button onclick="resetHostWallet()">Reset Wallet</button>
+          <button class="btn-primary" onclick="runAutomatedAuditTest()">Run Ledger Test</button>
+        </div>
+      </div>
+
+      <!-- Edge Case & Stress Testing Suite -->
+      <div class="card">
+        <div class="card-title">Edge Cases & Protocol Stress Tests</div>
+        <div class="btn-group">
+          <button onclick="testDuplicateAccept()">Replay Last Accept</button>
+          <button onclick="testDuplicateSettle()">Replay Last Settle</button>
+          <button onclick="testDuplicateBetRequest()">Inject Duplicate Bet</button>
+          <button onclick="testCorruptMessage()">Send Corrupt Msg</button>
+        </div>
+      </div>
+
+      <!-- Live PostMessage Traffic Inspector -->
+      <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="card-title">
+          <span>postMessage Traffic</span>
+          <button style="padding: 2px 8px; font-size: 10px;" onclick="clearLogs()">Clear</button>
+        </div>
+        <div class="log-stream" id="logStream"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Host Authoritative State
+    let hostBalance = 1250.00;
+    // Map of requestId -> { requestId, roundId, slotId, amount }
+    const activeBets = new Map();
+    // Set of settled requestIds
+    const settledIds = new Set();
+    let lastAcceptedRequest = null;
+    let lastSettledResult = null;
+    let lastBetRequestData = null;
+
+    const frame = document.getElementById('traderFrame');
+    const logStream = document.getElementById('logStream');
+    const hostBalanceEl = document.getElementById('hostBalance');
+    const headerBalanceEl = document.getElementById('headerBalance');
+    const activeWagersEl = document.getElementById('activeWagers');
+    const settledCountEl = document.getElementById('settledCount');
+    const connStatusEl = document.getElementById('connStatus');
+
+    function updateUI() {
+      const formatted = `$${hostBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      hostBalanceEl.textContent = formatted;
+      headerBalanceEl.textContent = formatted;
+      activeWagersEl.textContent = activeBets.size;
+      settledCountEl.textContent = settledIds.size;
+    }
+
+    function log(type, text, raw) {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      const time = new Date().toLocaleTimeString();
+      entry.innerHTML = `<span class="log-time">[${time}]</span> <strong>${text}</strong>`;
+      if (raw) {
+        const pre = document.createElement('pre');
+        pre.style.marginTop = '4px';
+        pre.style.color = '#cbd5e1';
+        pre.textContent = JSON.stringify(raw, null, 2);
+        entry.appendChild(pre);
+      }
+      logStream.appendChild(entry);
+      logStream.scrollTop = logStream.scrollHeight;
+    }
+
+    function clearLogs() {
+      logStream.innerHTML = '';
+    }
+
+    function postToIframe(msg) {
+      if (!frame.contentWindow) return;
+      log('outbound', `HOST → TRADER: ${msg.type}`, msg);
+      frame.contentWindow.postMessage(msg, '*');
+    }
+
+    function sendInit(amt) {
+      hostBalance = amt;
+      updateUI();
+      postToIframe({
+        type: 'BETADRiX_TRADER_INIT',
+        balance: hostBalance,
+        currency: 'USD'
+      });
+      connStatusEl.textContent = 'CONNECTED';
+      connStatusEl.className = 'badge badge-green';
+    }
+
+    function sendBalanceUpdate(bonus) {
+      hostBalance += bonus;
+      updateUI();
+      postToIframe({
+        type: 'BETADRiX_BALANCE_UPDATE',
+        balance: hostBalance
+      });
+    }
+
+    function resetHostWallet() {
+      hostBalance = 1250.00;
+      activeBets.clear();
+      settledIds.clear();
+      updateUI();
+      sendInit(1250.00);
+      log('warn', 'Host wallet reset to $1,250.00. Active wagers: 0');
+    }
+
+    function reloadIframe() {
+      connStatusEl.textContent = 'RELOADING...';
+      connStatusEl.className = 'badge badge-red';
+      frame.src = '/embed';
+      log('warn', 'Reloading iframe...');
+    }
+
+    // Stress Tests
+    function testDuplicateAccept() {
+      if (!lastAcceptedRequest) {
+        log('error', 'No previous accepted bet to replay!');
+        return;
+      }
+      log('warn', 'Replaying DUPLICATE BET ACCEPTANCE to iframe (should be ignored)...');
+      postToIframe(lastAcceptedRequest);
+    }
+
+    function testDuplicateSettle() {
+      if (!lastSettledResult) {
+        log('error', 'No previous settlement to replay!');
+        return;
+      }
+      log('warn', 'Replaying DUPLICATE SETTLEMENT to iframe (should be ignored)...');
+      postToIframe(lastSettledResult);
+    }
+
+    function testDuplicateBetRequest() {
+      if (!lastBetRequestData) {
+        log('error', 'No previous bet request available!');
+        return;
+      }
+      log('warn', 'Simulating duplicate TRADER_BET_REQUEST with same requestId...');
+      window.dispatchEvent(new MessageEvent('message', { data: lastBetRequestData }));
+    }
+
+    function testCorruptMessage() {
+      log('warn', 'Sending corrupted protocol message...');
+      frame.contentWindow.postMessage({ type: 'CORRUPTED_MSG', balance: 'INVALID' }, '*');
+    }
+
+    // Automated Deterministic Ledger Audit Test
+    function runAutomatedAuditTest() {
+      log('warn', '=== RUNNING DETERMINISTIC LEDGER AUDIT TEST ===');
+      resetHostWallet();
+
+      const initialBal = hostBalance; // 1250.00
+      log('outbound', `Starting Balance: $${initialBal.toFixed(2)}, Active Wagers: ${activeBets.size}`);
+
+      // Test Scenario:
+      // Round 101: Bet 1 = $25, Bet 2 = $25
+      const rId = 'audit_round_101';
+      const req1 = `${rId}_slot1_req_test1`;
+      const req2 = `${rId}_slot2_req_test2`;
+
+      // 1. Submit Bet 1
+      handleBetRequest({ requestId: req1, roundId: rId, slotId: 'slot1', amount: 25 });
+      // 2. Submit Bet 2
+      handleBetRequest({ requestId: req2, roundId: rId, slotId: 'slot2', amount: 25 });
+
+      // Check balance: 1250 - 50 = 1200
+      const afterBetsBal = hostBalance;
+      const afterBetsWagers = activeBets.size;
+      log('inbound', `[CHECK 1] Balance after 2x $25 bets: $${afterBetsBal.toFixed(2)} (Expected 1200.00)`);
+      log('inbound', `[CHECK 2] Active Wagers: ${afterBetsWagers} (Expected 2)`);
+
+      // 3. Duplicate Bet 1 submission attempt (must be rejected!)
+      handleBetRequest({ requestId: req1, roundId: rId, slotId: 'slot1', amount: 25 });
+      log('inbound', `[CHECK 3] Active Wagers after duplicate attempt: ${activeBets.size} (Expected 2)`);
+
+      // 4. Cash out Bet 1 at 1.50x (Payout = 25 * 1.50 = 37.50)
+      handleResult({ requestId: req1, roundId: rId, slotId: 'slot1', outcome: 'CASHOUT', multiplier: 1.50 });
+      log('inbound', `[CHECK 4] Balance after Bet 1 cashout: $${hostBalance.toFixed(2)} (Expected 1237.50)`);
+      log('inbound', `[CHECK 5] Active Wagers after Bet 1 cashout: ${activeBets.size} (Expected 1)`);
+
+      // 5. Crash occurs at 3.00x: Bet 2 crashes (Payout = $0)
+      handleResult({ requestId: req2, roundId: rId, slotId: 'slot2', outcome: 'CRASH', multiplier: 3.00 });
+      log('inbound', `[CHECK 6] Balance after Bet 2 crash: $${hostBalance.toFixed(2)} (Expected 1237.50)`);
+      log('inbound', `[CHECK 7] Active Wagers after Round Settle: ${activeBets.size} (Expected 0)`);
+
+      // Assertions
+      const passed =
+        afterBetsBal === 1200.00 &&
+        afterBetsWagers === 2 &&
+        hostBalance === 1237.50 &&
+        activeBets.size === 0;
+
+      if (passed) {
+        log('outbound', '>>> AUDIT TEST PASSED: Ledger math & active wager count 100% accurate! <<<');
+      } else {
+        log('error', '>>> AUDIT TEST FAILED: Discrepancy detected in ledger! <<<');
+      }
+    }
+
+    function handleBetRequest(data) {
+      const reqId = data.requestId;
+      const amt = data.amount;
+      const rId = data.roundId || 'round_default';
+      const sId = data.slotId || 'slot1';
+
+      lastBetRequestData = { type: 'TRADER_BET_REQUEST', ...data };
+
+      const autoAccept = document.getElementById('autoAcceptBets').checked;
+      const forceReject = document.getElementById('simulateReject').checked;
+
+      // Duplicate check
+      if (activeBets.has(reqId) || settledIds.has(reqId)) {
+        log('error', `DUPLICATE BET REQUEST REJECTED: ${reqId}`);
+        return;
+      }
+
+      if (forceReject || amt > hostBalance || !autoAccept) {
+        log('warn', `Bet rejected for req: ${reqId}`);
+        postToIframe({
+          type: 'BETADRiX_BET_REJECTED',
+          requestId: reqId,
+          roundId: rId,
+          slotId: sId,
+          reason: amt > hostBalance ? 'INSUFFICIENT_BALANCE' : 'HOST_SIMULATED_REJECT'
+        });
+      } else {
+        // Authoritative deduction
+        hostBalance = Number((hostBalance - amt).toFixed(2));
+        activeBets.set(reqId, { requestId: reqId, roundId: rId, slotId: sId, amount: amt });
+        updateUI();
+
+        const acceptMsg = {
+          type: 'BETADRiX_BET_ACCEPTED',
+          requestId: reqId,
+          roundId: rId,
+          slotId: sId,
+          amount: amt,
+          balance: hostBalance
+        };
+        lastAcceptedRequest = acceptMsg;
+        postToIframe(acceptMsg);
+      }
+    }
+
+    function handleResult(data) {
+      const reqId = data.requestId;
+      const outcome = data.outcome;
+      const mult = data.multiplier;
+      const rId = data.roundId;
+      const sId = data.slotId;
+
+      // Duplicate settlement check
+      if (settledIds.has(reqId)) {
+        log('error', `DUPLICATE SETTLEMENT ATTEMPT REJECTED: ${reqId}`);
+        return;
+      }
+
+      const activePos = activeBets.get(reqId);
+      const wager = activePos ? activePos.amount : 25;
+      let payout = 0;
+
+      if (outcome === 'CASHOUT') {
+        payout = Number((wager * mult).toFixed(2));
+        hostBalance = Number((hostBalance + payout).toFixed(2));
+      }
+
+      // Decrement active wager
+      activeBets.delete(reqId);
+      settledIds.add(reqId);
+      updateUI();
+
+      const settleMsg = {
+        type: 'BETADRiX_RESULT_SETTLED',
+        requestId: reqId,
+        roundId: rId,
+        slotId: sId,
+        betAmount: wager,
+        payout: payout,
+        balance: hostBalance
+      };
+      lastSettledResult = settleMsg;
+      postToIframe(settleMsg);
+    }
+
+    // Inbound listener for messages from Trader iframe
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object' || !data.type) return;
+
+      log('inbound', `TRADER → HOST: ${data.type}`, data);
+
+      switch (data.type) {
+        case 'TRADER_READY': {
+          connStatusEl.textContent = 'READY RECEIVED';
+          connStatusEl.className = 'badge badge-green';
+          setTimeout(() => {
+            sendInit(hostBalance);
+          }, 200);
+          break;
+        }
+
+        case 'TRADER_BET_REQUEST': {
+          handleBetRequest(data);
+          break;
+        }
+
+        case 'TRADER_CASHOUT_REQUEST': {
+          log('inbound', `Cashout acknowledged for ${data.requestId} at ${data.multiplier}x`);
+          break;
+        }
+
+        case 'TRADER_RESULT': {
+          handleResult(data);
+          break;
+        }
+
+        default:
+          break;
+      }
+    });
+
+    updateUI();
+  </script>
+</body>
+</html>
