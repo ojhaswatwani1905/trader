@@ -595,17 +595,7 @@ export function useTraderGame(options?: UseTraderGameOptions) {
           payout: calculatedPayout,
         }));
 
-        postToHost({
-          type: 'TRADER_CASHOUT_REQUEST',
-          gameId: 'trader',
-          requestId: reqId,
-          roundId: rId,
-          slotId,
-          multiplier: mult,
-          amount: slot.amount,
-          payout: calculatedPayout,
-        });
-
+        // Single authoritative settlement event dispatched to host
         postToHost({
           type: 'TRADER_RESULT',
           gameId: 'trader',
