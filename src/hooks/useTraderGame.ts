@@ -43,8 +43,11 @@ export function useTraderGame(options?: UseTraderGameOptions) {
   const [trajectory, setTrajectory] = useState<TrajectoryPoint[]>([{ t: 0, multiplier: 1.0 }]);
 
   // Authoritative Wallet & Balance
-  const [balance, setBalance] = useState<number>(STANDALONE_INITIAL_BALANCE);
+  const [balance, setBalance] = useState<number>(
+    options?.forceEmbedded ? 0 : STANDALONE_INITIAL_BALANCE
+  );
   const [currency, setCurrency] = useState<string>('USD');
+  const [isInitialized, setIsInitialized] = useState<boolean>(!options?.forceEmbedded);
 
   // History & Simulated Live Bets
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -80,8 +83,9 @@ export function useTraderGame(options?: UseTraderGameOptions) {
   const roundIdRef = useRef<string>('round_init');
   const phaseRef = useRef<RoundPhase>('BETTING');
   const currentMultiplierRef = useRef<number>(1.0);
-  const balanceRef = useRef<number>(STANDALONE_INITIAL_BALANCE);
-  const isEmbeddedRef = useRef<boolean>(false);
+  const balanceRef = useRef<number>(options?.forceEmbedded ? 0 : STANDALONE_INITIAL_BALANCE);
+  const isEmbeddedRef = useRef<boolean>(!!options?.forceEmbedded);
+  const isInitializedRef = useRef<boolean>(!options?.forceEmbedded);
   const detectedOriginRef = useRef<string | null>(null);
   const engineRef = useRef<TraderRoundEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -192,11 +196,14 @@ export function useTraderGame(options?: UseTraderGameOptions) {
 
         postToHost({
           type: 'TRADER_RESULT',
+          gameId: 'trader',
           requestId: s1.requestId,
           roundId: activeRound,
           slotId: 'slot1',
           outcome: 'CRASH',
           multiplier: crashMultiplier,
+          betAmount: s1.amount,
+          payout: 0,
         });
       } else {
         settledRequestsRef.current.add(s1.requestId);
@@ -216,11 +223,14 @@ export function useTraderGame(options?: UseTraderGameOptions) {
 
         postToHost({
           type: 'TRADER_RESULT',
+          gameId: 'trader',
           requestId: s2.requestId,
           roundId: activeRound,
           slotId: 'slot2',
           outcome: 'CRASH',
           multiplier: crashMultiplier,
+          betAmount: s2.amount,
+          payout: 0,
         });
       } else {
         settledRequestsRef.current.add(s2.requestId);
@@ -387,11 +397,25 @@ export function useTraderGame(options?: UseTraderGameOptions) {
     setSoundMuted(soundManager.isMuted());
 
     if (embedded) {
-      postToHost({ type: 'TRADER_READY' });
+      // In embedded mode, balance is NOT loaded from localStorage and defaults to 0 until BETADRiX_TRADER_INIT
+      setBalance(0);
+      balanceRef.current = 0;
+      setIsInitialized(false);
+      isInitializedRef.current = false;
+
+      const sendReady = () => {
+        postToHost({
+          type: 'TRADER_READY',
+          game: 'trader',
+          gameId: 'trader',
+        });
+      };
+
+      sendReady();
 
       const readyInterval = setInterval(() => {
-        if (!detectedOriginRef.current) {
-          postToHost({ type: 'TRADER_READY' });
+        if (!isInitializedRef.current) {
+          sendReady();
         } else {
           clearInterval(readyInterval);
         }
@@ -400,6 +424,8 @@ export function useTraderGame(options?: UseTraderGameOptions) {
       initNewRound();
       return () => clearInterval(readyInterval);
     } else {
+      setIsInitialized(true);
+      isInitializedRef.current = true;
       // Standalone mode: load saved local balance
       try {
         const savedBal = localStorage.getItem(STORAGE_STANDALONE_BALANCE);
@@ -447,6 +473,9 @@ export function useTraderGame(options?: UseTraderGameOptions) {
       // 1. MUST be in BETTING phase
       if (phaseRef.current !== 'BETTING') return;
 
+      // In embedded mode, betting is strictly locked until initialized by BETADRiX
+      if (isEmbeddedRef.current && !isInitializedRef.current) return;
+
       const slot = slotId === 'slot1' ? slot1Ref.current : slot2Ref.current;
       // 2. MUST be EMPTY (prevent duplicate click/bet)
       if (slot.status !== 'EMPTY') return;
@@ -457,6 +486,11 @@ export function useTraderGame(options?: UseTraderGameOptions) {
       }
       const roundedAmount = Number(amount.toFixed(2));
       if (roundedAmount < 0.1 || roundedAmount > 500) return;
+
+      // Validate against current balance
+      if (roundedAmount > balanceRef.current) {
+        return;
+      }
 
       const activeRound = roundIdRef.current;
       const requestId = `${activeRound}_${slotId}_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -487,6 +521,7 @@ export function useTraderGame(options?: UseTraderGameOptions) {
 
         postToHost({
           type: 'TRADER_BET_REQUEST',
+          gameId: 'trader',
           requestId,
           roundId: activeRound,
           slotId,
@@ -494,11 +529,6 @@ export function useTraderGame(options?: UseTraderGameOptions) {
         });
       } else {
         // STANDALONE MODE: Local wallet validation & deduction
-        if (roundedAmount > balanceRef.current) {
-          pendingRequestsRef.current.delete(requestId);
-          return;
-        }
-
         const nextBal = Number((balanceRef.current - roundedAmount).toFixed(2));
         setBalance(nextBal);
         balanceRef.current = nextBal;
@@ -567,19 +597,25 @@ export function useTraderGame(options?: UseTraderGameOptions) {
 
         postToHost({
           type: 'TRADER_CASHOUT_REQUEST',
+          gameId: 'trader',
           requestId: reqId,
           roundId: rId,
           slotId,
           multiplier: mult,
+          amount: slot.amount,
+          payout: calculatedPayout,
         });
 
         postToHost({
           type: 'TRADER_RESULT',
+          gameId: 'trader',
           requestId: reqId,
           roundId: rId,
           slotId,
           outcome: 'CASHOUT',
           multiplier: mult,
+          betAmount: slot.amount,
+          payout: calculatedPayout,
         });
       } else {
         const nextBal = Number((balanceRef.current + calculatedPayout).toFixed(2));
@@ -641,6 +677,17 @@ export function useTraderGame(options?: UseTraderGameOptions) {
     const handleMessage = (event: MessageEvent) => {
       if (!isAllowedOrigin(event.origin)) return;
 
+      // When embedded, strictly validate event.source is window.parent
+      if (
+        isEmbeddedRef.current &&
+        typeof window !== 'undefined' &&
+        window.parent &&
+        window.parent !== window &&
+        event.source !== window.parent
+      ) {
+        return;
+      }
+
       if (event.origin && event.origin !== 'null') {
         detectedOriginRef.current = event.origin;
         setDetectedHostOrigin(event.origin);
@@ -656,12 +703,17 @@ export function useTraderGame(options?: UseTraderGameOptions) {
             balanceRef.current = data.balance;
           }
           if (data.currency) setCurrency(data.currency);
+          setIsInitialized(true);
+          isInitializedRef.current = true;
           break;
         }
 
         case 'BETADRiX_BET_ACCEPTED': {
           const reqId = data.requestId;
           if (!pendingRequestsRef.current.has(reqId)) return;
+
+          // Round isolation check
+          if (data.roundId && data.roundId !== roundIdRef.current) return;
 
           pendingRequestsRef.current.delete(reqId);
 
@@ -712,6 +764,18 @@ export function useTraderGame(options?: UseTraderGameOptions) {
           const reqId = data.requestId;
           if (settledRequestsRef.current.has(reqId)) return;
 
+          // Round isolation check
+          const targetSlot =
+            slot1Ref.current.requestId === reqId
+              ? slot1Ref.current
+              : slot2Ref.current.requestId === reqId
+              ? slot2Ref.current
+              : null;
+
+          if (data.roundId && targetSlot && targetSlot.roundId && data.roundId !== targetSlot.roundId) {
+            return;
+          }
+
           settledRequestsRef.current.add(reqId);
           activeWagersRef.current.delete(reqId);
 
@@ -724,11 +788,13 @@ export function useTraderGame(options?: UseTraderGameOptions) {
             setSlot1((prev) => ({
               ...prev,
               status: prev.cashedMultiplier ? 'CASHED_OUT' : 'LOST',
+              payout: data.payout !== undefined ? data.payout : prev.payout,
             }));
           } else if (slot2Ref.current.requestId === reqId) {
             setSlot2((prev) => ({
               ...prev,
               status: prev.cashedMultiplier ? 'CASHED_OUT' : 'LOST',
+              payout: data.payout !== undefined ? data.payout : prev.payout,
             }));
           }
           break;
@@ -753,6 +819,7 @@ export function useTraderGame(options?: UseTraderGameOptions) {
 
   return {
     isEmbedded,
+    isInitialized,
     roundId,
     roundPhase,
     countdown,

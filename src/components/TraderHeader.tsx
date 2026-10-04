@@ -5,6 +5,7 @@ import { RoundPhase } from '@/types/trader';
 
 interface TraderHeaderProps {
   isEmbedded: boolean;
+  isInitialized?: boolean;
   roundPhase: RoundPhase;
   balance: number;
   currency: string;
@@ -15,6 +16,7 @@ interface TraderHeaderProps {
 
 export const TraderHeader: React.FC<TraderHeaderProps> = ({
   isEmbedded,
+  isInitialized = true,
   roundPhase,
   balance,
   currency,
@@ -22,7 +24,7 @@ export const TraderHeader: React.FC<TraderHeaderProps> = ({
   onToggleSound,
   onResetBalance,
 }) => {
-  const isConnecting = isEmbedded && roundPhase === 'BETTING' && balance === 0;
+  const isConnecting = isEmbedded && !isInitialized;
 
   return (
     <header className="w-full flex items-center justify-between bg-[#0C0F17] border-b border-[#1A1F2C] px-3.5 sm:px-4 py-2.5 select-none">

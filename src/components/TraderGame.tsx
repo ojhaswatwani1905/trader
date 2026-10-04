@@ -15,6 +15,7 @@ interface TraderGameProps {
 export const TraderGame: React.FC<TraderGameProps> = ({ forceEmbedded }) => {
   const {
     isEmbedded,
+    isInitialized,
     roundId,
     roundPhase,
     countdown,
@@ -57,6 +58,7 @@ export const TraderGame: React.FC<TraderGameProps> = ({ forceEmbedded }) => {
       {/* 1. Game Header */}
       <TraderHeader
         isEmbedded={isEmbedded}
+        isInitialized={isInitialized}
         roundPhase={roundPhase}
         balance={balance}
         currency={currency}
@@ -99,6 +101,8 @@ export const TraderGame: React.FC<TraderGameProps> = ({ forceEmbedded }) => {
               balance={balance}
               roundPhase={roundPhase}
               currentMultiplier={currentMultiplier}
+              isEmbedded={isEmbedded}
+              isInitialized={isInitialized}
               onPlaceBet={placeBet}
               onCashOut={cashOut}
               onAmountChange={setSlotAmount}
@@ -110,6 +114,8 @@ export const TraderGame: React.FC<TraderGameProps> = ({ forceEmbedded }) => {
               balance={balance}
               roundPhase={roundPhase}
               currentMultiplier={currentMultiplier}
+              isEmbedded={isEmbedded}
+              isInitialized={isInitialized}
               onPlaceBet={placeBet}
               onCashOut={cashOut}
               onAmountChange={setSlotAmount}

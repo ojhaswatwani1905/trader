@@ -59,9 +59,16 @@ export function getSafeTargetOrigin(detectedOrigin?: string | null): string {
     return detectedOrigin;
   }
 
-  if (typeof window !== 'undefined' && window.location.origin) {
-    return window.location.origin;
+  // If inside an iframe, attempt to resolve parent origin from document.referrer
+  if (typeof document !== 'undefined' && document.referrer) {
+    try {
+      const refOrigin = new URL(document.referrer).origin;
+      if (isAllowedOrigin(refOrigin)) {
+        return refOrigin;
+      }
+    } catch {}
   }
 
+  // Fallback to trusted production BETADRiX host
   return 'https://demo-m4tn.onrender.com';
 }

@@ -48,16 +48,20 @@ export interface BetSlotState {
 // PostMessage Inbound & Outbound Types
 export type TraderReadyMessage = {
   type: 'TRADER_READY';
+  game?: string;
+  gameId?: string;
 };
 
 export type BetadrixInitMessage = {
   type: 'BETADRiX_TRADER_INIT';
   balance: number;
-  currency: string;
+  currency?: string;
+  user?: { id?: string; name?: string };
 };
 
 export type TraderBetRequestMessage = {
   type: 'TRADER_BET_REQUEST';
+  gameId?: string;
   requestId: string;
   roundId: string;
   slotId: SlotId;
@@ -69,7 +73,7 @@ export type BetadrixBetAcceptedMessage = {
   requestId: string;
   roundId?: string;
   slotId?: SlotId;
-  amount: number;
+  amount?: number;
   balance: number;
 };
 
@@ -78,24 +82,30 @@ export type BetadrixBetRejectedMessage = {
   requestId: string;
   roundId?: string;
   slotId?: SlotId;
-  reason: string;
+  reason?: string;
 };
 
 export type TraderCashoutRequestMessage = {
   type: 'TRADER_CASHOUT_REQUEST';
+  gameId?: string;
   requestId: string;
   roundId: string;
   slotId: SlotId;
   multiplier: number;
+  amount?: number;
+  payout?: number;
 };
 
 export type TraderResultMessage = {
   type: 'TRADER_RESULT';
+  gameId?: string;
   requestId: string;
   roundId: string;
   slotId: SlotId;
   outcome: OutcomeType;
   multiplier: number;
+  betAmount?: number;
+  payout?: number;
 };
 
 export type BetadrixResultSettledMessage = {
@@ -103,8 +113,8 @@ export type BetadrixResultSettledMessage = {
   requestId: string;
   roundId?: string;
   slotId?: SlotId;
-  betAmount: number;
-  payout: number;
+  betAmount?: number;
+  payout?: number;
   balance: number;
 };
 

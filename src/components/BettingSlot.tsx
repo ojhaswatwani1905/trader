@@ -8,6 +8,8 @@ interface BettingSlotProps {
   balance: number;
   roundPhase: RoundPhase;
   currentMultiplier: number;
+  isEmbedded?: boolean;
+  isInitialized?: boolean;
   onPlaceBet: (slotId: SlotId, amount: number) => void;
   onCashOut: (slotId: SlotId) => void;
   onAmountChange: (slotId: SlotId, amount: number) => void;
@@ -19,6 +21,8 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
   balance,
   roundPhase,
   currentMultiplier,
+  isEmbedded = false,
+  isInitialized = true,
   onPlaceBet,
   onCashOut,
   onAmountChange,
@@ -30,30 +34,32 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
     slot.autoCashoutMultiplier.toFixed(2)
   );
 
+  const isLocked = isEmbedded && !isInitialized;
+
   useEffect(() => {
     setInputVal(slot.amount.toFixed(2));
   }, [slot.amount]);
 
   const handleStep = (delta: number) => {
-    if (slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
+    if (isLocked || slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
     const next = Math.max(0.1, Math.min(500, Number((slot.amount + delta).toFixed(2))));
     onAmountChange(slot.id, next);
   };
 
   const handleHalf = () => {
-    if (slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
+    if (isLocked || slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
     const next = Math.max(0.1, Number((slot.amount / 2).toFixed(2)));
     onAmountChange(slot.id, next);
   };
 
   const handleDouble = () => {
-    if (slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
+    if (isLocked || slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
     const next = Math.min(500, Math.min(balance, Number((slot.amount * 2).toFixed(2))));
     onAmountChange(slot.id, next);
   };
 
   const handlePreset = (val: number) => {
-    if (slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
+    if (isLocked || slot.status !== 'EMPTY' || roundPhase !== 'BETTING') return;
     onAmountChange(slot.id, Math.min(balance, val));
   };
 
@@ -89,7 +95,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
 
   const currentCashoutVal = (slot.amount * currentMultiplier).toFixed(2);
   const canPlaceBet =
-    slot.status === 'EMPTY' && isBetting && balance >= slot.amount;
+    !isLocked && slot.status === 'EMPTY' && isBetting && balance >= slot.amount;
 
   return (
     <div className="flex-1 bg-[#0E1118] border border-[#1E2330] rounded-xl p-3 sm:p-3.5 flex flex-col justify-between space-y-2.5 select-none shadow-lg">
@@ -146,7 +152,8 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
               type="checkbox"
               checked={slot.autoCashoutEnabled}
               onChange={toggleAutoCashout}
-              className="rounded accent-[#00D26A] w-4 h-4 cursor-pointer"
+              disabled={isLocked}
+              className="rounded accent-[#00D26A] w-4 h-4 cursor-pointer disabled:opacity-40"
             />
             <span className="text-[#A0AEC0] text-xs font-semibold">Auto Cashout</span>
           </label>
@@ -160,7 +167,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
               max="100"
               value={autoMultVal}
               onChange={handleAutoMultChange}
-              disabled={!slot.autoCashoutEnabled}
+              disabled={isLocked || !slot.autoCashoutEnabled}
               className="w-20 bg-[#141822] border border-[#273042] rounded-md px-2 py-1 text-center font-black text-white text-xs disabled:opacity-40 focus:border-[#E50914] focus:outline-none"
             />
             <span className="text-[#A0AEC0] font-black text-xs">x</span>
@@ -183,7 +190,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
           <div className="flex items-center bg-[#080A0F] border border-[#1E2330] rounded-lg p-1">
             <button
               type="button"
-              disabled={slot.status !== 'EMPTY' || !isBetting}
+              disabled={isLocked || slot.status !== 'EMPTY' || !isBetting}
               onClick={() => handleStep(-1)}
               className="w-8 h-8 rounded-md bg-[#161B26] hover:bg-[#202738] active:scale-95 text-white font-black text-base flex items-center justify-center transition border border-[#232B3E] disabled:opacity-30 disabled:cursor-not-allowed"
             >
@@ -196,7 +203,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
                 step="any"
                 min={0.1}
                 max={500}
-                disabled={slot.status !== 'EMPTY' || !isBetting}
+                disabled={isLocked || slot.status !== 'EMPTY' || !isBetting}
                 value={inputVal}
                 onChange={handleInputChange}
                 className="w-full bg-transparent text-center font-black text-sm sm:text-base text-white focus:outline-none tabular-nums disabled:opacity-50"
@@ -204,7 +211,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
             </div>
             <button
               type="button"
-              disabled={slot.status !== 'EMPTY' || !isBetting}
+              disabled={isLocked || slot.status !== 'EMPTY' || !isBetting}
               onClick={() => handleStep(1)}
               className="w-8 h-8 rounded-md bg-[#161B26] hover:bg-[#202738] active:scale-95 text-white font-black text-base flex items-center justify-center transition border border-[#232B3E] disabled:opacity-30 disabled:cursor-not-allowed"
             >
@@ -216,7 +223,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
           <div className="flex items-center space-x-1 text-xs">
             <button
               type="button"
-              disabled={slot.status !== 'EMPTY' || !isBetting}
+              disabled={isLocked || slot.status !== 'EMPTY' || !isBetting}
               onClick={handleHalf}
               className="px-2 py-1.5 rounded-md bg-[#131722] hover:bg-[#1C2333] text-[#A0AEC0] font-bold border border-[#202738] transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
               title="Half amount"
@@ -225,7 +232,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
             </button>
             <button
               type="button"
-              disabled={slot.status !== 'EMPTY' || !isBetting}
+              disabled={isLocked || slot.status !== 'EMPTY' || !isBetting}
               onClick={handleDouble}
               className="px-2 py-1.5 rounded-md bg-[#131722] hover:bg-[#1C2333] text-[#A0AEC0] font-bold border border-[#202738] transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
               title="Double amount"
@@ -236,7 +243,7 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
               <button
                 key={preset}
                 type="button"
-                disabled={slot.status !== 'EMPTY' || !isBetting}
+                disabled={isLocked || slot.status !== 'EMPTY' || !isBetting}
                 onClick={() => handlePreset(preset)}
                 className={`flex-1 py-1.5 rounded-md text-[11px] font-black transition border ${
                   slot.amount === preset
@@ -325,6 +332,18 @@ export const BettingSlot: React.FC<BettingSlotProps> = ({
               className="w-full h-full min-h-[72px] py-2 rounded-xl font-bold text-xs text-blue-300 bg-[#0B1526] border border-blue-500/50 cursor-not-allowed flex flex-col items-center justify-center animate-pulse"
             >
               <span className="text-[10px] uppercase tracking-wider font-extrabold">VERIFYING...</span>
+            </button>
+          ) : isLocked ? (
+            /* Locked until host initialization */
+            <button
+              type="button"
+              disabled
+              className="w-full h-full min-h-[72px] py-2 rounded-xl font-bold text-xs text-[#718096] bg-[#121620] border border-[#1E2330] cursor-not-allowed flex flex-col items-center justify-center animate-pulse"
+            >
+              <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#718096]">
+                CONNECTING...
+              </span>
+              <span className="text-[10px] text-[#4B5563] mt-0.5 font-semibold">WAITING FOR HOST</span>
             </button>
           ) : !isBetting && !isActive ? (
             /* Betting closed during LIVE round for this empty slot */
