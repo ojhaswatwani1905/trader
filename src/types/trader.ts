@@ -45,6 +45,11 @@ export interface BetSlotState {
   autoCashoutMultiplier: number;
 }
 
+export interface TraderEconomics {
+  houseEdge: number;
+  version: number;
+}
+
 // PostMessage Inbound & Outbound Types
 export type TraderReadyMessage = {
   type: 'TRADER_READY';
@@ -57,6 +62,7 @@ export type BetadrixInitMessage = {
   balance: number;
   currency?: string;
   user?: { id?: string; name?: string };
+  economics?: TraderEconomics;
 };
 
 export type TraderBetRequestMessage = {
@@ -123,12 +129,18 @@ export type BetadrixBalanceUpdateMessage = {
   balance: number;
 };
 
+export type BetadrixEconomicsUpdateMessage = {
+  type: 'BETADRiX_ECONOMICS_UPDATE';
+  economics: TraderEconomics;
+};
+
 export type BetadrixInboundMessage =
   | BetadrixInitMessage
   | BetadrixBetAcceptedMessage
   | BetadrixBetRejectedMessage
   | BetadrixResultSettledMessage
-  | BetadrixBalanceUpdateMessage;
+  | BetadrixBalanceUpdateMessage
+  | BetadrixEconomicsUpdateMessage;
 
 export type TraderOutboundMessage =
   | TraderReadyMessage

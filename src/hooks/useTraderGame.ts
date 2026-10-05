@@ -8,10 +8,11 @@ import {
   HistoryItem,
   SimulatedTrader,
   TrajectoryPoint,
+  TraderEconomics,
   BetadrixInboundMessage,
   TraderOutboundMessage,
 } from '@/types/trader';
-import { isAllowedOrigin, getSafeTargetOrigin } from '@/lib/security';
+import { isAllowedOrigin, getSafeTargetOrigin, validateHouseEdge, validateEconomicsVersion } from '@/lib/security';
 import { soundManager } from '@/lib/sound';
 import { TraderRoundEngine } from '@/lib/traderEngine';
 
@@ -78,6 +79,11 @@ export function useTraderGame(options?: UseTraderGameOptions) {
     autoCashoutEnabled: false,
     autoCashoutMultiplier: 2.0,
   });
+
+  // Economics Configuration (snapshot per round, updated for subsequent rounds)
+  const [economics, setEconomics] = useState<TraderEconomics>({ houseEdge: 4.00, version: 1 });
+  const currentEconomicsRef = useRef<TraderEconomics>({ houseEdge: 4.00, version: 1 });
+  const nextEconomicsRef = useRef<TraderEconomics>({ houseEdge: 4.00, version: 1 });
 
   // Synchronous State References (Guarantees zero race conditions)
   const roundIdRef = useRef<string>('round_init');
@@ -354,9 +360,16 @@ export function useTraderGame(options?: UseTraderGameOptions) {
     startSimulationLoop();
   }, [setPhase, startSimulationLoop]);
 
-  // Initialize a completely new round with clean roundId
-  const initNewRound = useCallback(() => {
-    const engine = new TraderRoundEngine();
+  // Initialize a completely new round with clean roundId and economics snapshot
+  const initNewRound = useCallback((overrideEconomics?: TraderEconomics) => {
+    const econ = overrideEconomics || nextEconomicsRef.current;
+    currentEconomicsRef.current = econ;
+    setEconomics(econ);
+
+    const engine = new TraderRoundEngine({
+      houseEdge: econ.houseEdge,
+      economicsVersion: econ.version,
+    });
     engineRef.current = engine;
     engine.startBetting();
 
@@ -688,6 +701,31 @@ export function useTraderGame(options?: UseTraderGameOptions) {
 
       switch (data.type) {
         case 'BETADRiX_TRADER_INIT': {
+          // In embedded mode, economics MUST be provided and valid
+          if (isEmbeddedRef.current) {
+            if (!data.economics || typeof data.economics !== 'object') {
+              console.error('[Trader] BETADRiX_TRADER_INIT rejected: missing economics configuration.');
+              return;
+            }
+            const edgeVal = validateHouseEdge(data.economics.houseEdge);
+            const verVal = validateEconomicsVersion(data.economics.version);
+            if (!edgeVal.valid || edgeVal.normalized === undefined || !verVal.valid || verVal.normalized === undefined) {
+              console.error('[Trader] BETADRiX_TRADER_INIT rejected: invalid economics configuration.', edgeVal.error || verVal.error);
+              return;
+            }
+
+            const validatedEcon: TraderEconomics = {
+              houseEdge: edgeVal.normalized,
+              version: verVal.normalized,
+            };
+            nextEconomicsRef.current = validatedEcon;
+            currentEconomicsRef.current = validatedEcon;
+            setEconomics(validatedEcon);
+
+            // Re-initialize round with authenticated economics snapshot
+            initNewRound(validatedEcon);
+          }
+
           if (typeof data.balance === 'number' && !isNaN(data.balance)) {
             setBalance(data.balance);
             balanceRef.current = data.balance;
@@ -695,6 +733,31 @@ export function useTraderGame(options?: UseTraderGameOptions) {
           if (data.currency) setCurrency(data.currency);
           setIsInitialized(true);
           isInitializedRef.current = true;
+          break;
+        }
+
+        case 'BETADRiX_ECONOMICS_UPDATE': {
+          if (!data.economics || typeof data.economics !== 'object') {
+            console.warn('[Trader] BETADRiX_ECONOMICS_UPDATE ignored: missing economics object.');
+            return;
+          }
+          const edgeVal = validateHouseEdge(data.economics.houseEdge);
+          const verVal = validateEconomicsVersion(data.economics.version);
+          if (!edgeVal.valid || edgeVal.normalized === undefined || !verVal.valid || verVal.normalized === undefined) {
+            console.warn('[Trader] BETADRiX_ECONOMICS_UPDATE ignored: invalid values.', edgeVal.error || verVal.error);
+            return;
+          }
+
+          const newEcon: TraderEconomics = {
+            houseEdge: edgeVal.normalized,
+            version: verVal.normalized,
+          };
+
+          // CRITICAL: Mid-round snapshot stability rule
+          // Active running round continues using its existing economics snapshot (currentEconomicsRef).
+          // The new configuration is queued into nextEconomicsRef and will be applied to the subsequent round.
+          nextEconomicsRef.current = newEcon;
+          console.log(`[Trader] Queued new economics config (v${newEcon.version}, ${newEcon.houseEdge}% edge) for next round.`);
           break;
         }
 
@@ -830,5 +893,7 @@ export function useTraderGame(options?: UseTraderGameOptions) {
     setAutoCashout,
     resetStandaloneBalance,
     toggleSound,
+    economics: currentEconomicsRef.current,
+    nextEconomics: nextEconomicsRef.current,
   };
 }

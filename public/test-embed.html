@@ -252,6 +252,17 @@
         </div>
       </div>
 
+      <!-- Economics Realtime Controls -->
+      <div class="card">
+        <div class="card-title">Realtime Economics Controls (Admin)</div>
+        <div class="btn-group">
+          <button onclick="sendEconomicsUpdate(0.00)">Set Edge 0% (v+1)</button>
+          <button onclick="sendEconomicsUpdate(5.00)">Set Edge 5% (v+1)</button>
+          <button onclick="sendEconomicsUpdate(8.00)">Set Edge 8% (v+1)</button>
+          <button onclick="sendEconomicsUpdate(10.00)">Set Edge 10% (v+1)</button>
+        </div>
+      </div>
+
       <!-- Edge Case & Stress Testing Suite -->
       <div class="card">
         <div class="card-title">Edge Cases & Protocol Stress Tests</div>
@@ -327,16 +338,36 @@
       frame.contentWindow.postMessage(msg, '*');
     }
 
+    let currentHostHouseEdge = 4.00;
+    let currentHostEconVersion = 1;
+
     function sendInit(amt) {
       hostBalance = amt;
       updateUI();
       postToIframe({
         type: 'BETADRiX_TRADER_INIT',
         balance: hostBalance,
-        currency: 'USD'
+        currency: 'USD',
+        economics: {
+          houseEdge: currentHostHouseEdge,
+          version: currentHostEconVersion,
+        }
       });
       connStatusEl.textContent = 'CONNECTED';
       connStatusEl.className = 'badge badge-green';
+    }
+
+    function sendEconomicsUpdate(edge, ver) {
+      currentHostHouseEdge = edge;
+      currentHostEconVersion = ver || (currentHostEconVersion + 1);
+      postToIframe({
+        type: 'BETADRiX_ECONOMICS_UPDATE',
+        economics: {
+          houseEdge: currentHostHouseEdge,
+          version: currentHostEconVersion,
+        }
+      });
+      log('outbound', `ADMIN: Updated house edge to ${currentHostHouseEdge}% (v${currentHostEconVersion})`);
     }
 
     function sendBalanceUpdate(bonus) {

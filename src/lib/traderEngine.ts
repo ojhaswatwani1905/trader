@@ -10,11 +10,14 @@
  */
 
 import { RoundPhase, SlotId, TrajectoryPoint } from '@/types/trader';
+import { validateHouseEdge, validateEconomicsVersion } from '@/lib/security';
 
 export interface RoundEngineConfig {
   seed?: string | number;
   customCrash?: number;
   bettingDuration?: number;
+  houseEdge?: number;
+  economicsVersion?: number;
 }
 
 export interface RoundState {
@@ -28,6 +31,8 @@ export interface RoundState {
   trajectory: TrajectoryPoint[];
   crashedAt: number | null;
   settledAt: number | null;
+  houseEdge: number;
+  economicsVersion: number;
 }
 
 // PRNG: 32-bit Mulberry PRNG for deterministic, reproducible simulation runs
@@ -72,6 +77,8 @@ export class TraderRoundEngine {
   private trajectory: TrajectoryPoint[];
   private crashedAt: number | null;
   private settledAt: number | null;
+  private houseEdge: number;
+  private economicsVersion: number;
 
   // Canonical pre-computed stochastic path for frame-rate independence and 100% determinism
   private canonicalPath: TrajectoryPoint[];
@@ -86,6 +93,13 @@ export class TraderRoundEngine {
     this.crashedAt = null;
     this.settledAt = null;
     this.trajectory = [{ t: 0, multiplier: 1.0 }];
+
+    // Validate & snapshot economics configuration for this round
+    const edgeVal = validateHouseEdge(config?.houseEdge);
+    this.houseEdge = edgeVal.valid && edgeVal.normalized !== undefined ? edgeVal.normalized : 4.00;
+
+    const versionVal = validateEconomicsVersion(config?.economicsVersion);
+    this.economicsVersion = versionVal.valid && versionVal.normalized !== undefined ? versionVal.normalized : 1;
 
     // 1. Generate Crash Multiplier
     if (config?.customCrash && config.customCrash >= 1.0) {
@@ -102,27 +116,37 @@ export class TraderRoundEngine {
   }
 
   /**
-   * Generates crash multiplier based on industry-standard crash distribution
+   * Generates crash multiplier based on the authoritative house edge.
+   *
+   * Mathematical Model:
+   * Target Return to Player (RTP) = 1 - houseEdge / 100.
+   * For continuous crash distributions, to ensure that the expected payout
+   * for any cashout target m >= 1.00 is exactly RTP (i.e., m * P(M >= m) = RTP),
+   * the probability distribution is defined by:
+   * P(M >= m) = (1 - h) / m, where h = houseEdge / 100.
+   *
+   * Sampling with PRNG uniform random r in [0, 1):
+   * - If r < h: Instant crash at 1.00x (probability h = houseEdge / 100).
+   * - If r >= h: M = (1 - h) / (1 - r), floored to 2 decimals.
+   *
+   * This guarantees:
+   * - 0% house edge -> ~100% RTP
+   * - 5% house edge -> ~95% RTP
+   * - 10% house edge -> ~90% RTP
+   * - 50% house edge -> ~50% RTP
+   * Independent of player identity, wallet balance, or bet size.
    */
   private generateCrashMultiplier(): number {
+    const h = this.houseEdge / 100;
     const r = this.rng();
 
-    if (r < 0.08) {
-      // Instant crash: 1.00x - 1.12x
-      return Number((1.0 + this.rng() * 0.12).toFixed(2));
-    } else if (r < 0.50) {
-      // Low bracket: 1.13x - 2.00x
-      return Number((1.13 + this.rng() * 0.87).toFixed(2));
-    } else if (r < 0.82) {
-      // Medium bracket: 2.01x - 5.00x
-      return Number((2.01 + this.rng() * 2.99).toFixed(2));
-    } else if (r < 0.96) {
-      // High bracket: 5.01x - 16.00x
-      return Number((5.01 + this.rng() * 10.99).toFixed(2));
-    } else {
-      // Moonshot bracket: 16.01x - 60.00x
-      return Number((16.01 + this.rng() * 43.99).toFixed(2));
+    if (r < h) {
+      return 1.00;
     }
+
+    const raw = (1 - h) / (1 - r);
+    const capped = Math.min(1000.00, Math.floor(raw * 100) / 100);
+    return Math.max(1.00, capped);
   }
 
   /**
@@ -331,7 +355,17 @@ export class TraderRoundEngine {
       trajectory: [...this.trajectory],
       crashedAt: this.crashedAt,
       settledAt: this.settledAt,
+      houseEdge: this.houseEdge,
+      economicsVersion: this.economicsVersion,
     };
+  }
+
+  public getHouseEdge(): number {
+    return this.houseEdge;
+  }
+
+  public getEconomicsVersion(): number {
+    return this.economicsVersion;
   }
 
   public getCurrentMultiplier(): number {

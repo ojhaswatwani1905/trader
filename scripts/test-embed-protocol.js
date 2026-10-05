@@ -177,9 +177,27 @@ class MockEmbeddedTrader {
 
     switch (data.type) {
       case 'BETADRiX_TRADER_INIT': {
+        if (data.economics) {
+          const edge = data.economics.houseEdge;
+          const ver = data.economics.version;
+          if (typeof edge !== 'number' || isNaN(edge) || !isFinite(edge) || edge < 0 || edge > 50) return;
+          if (typeof ver !== 'number' || !Number.isInteger(ver) || ver <= 0) return;
+          this.economics = { houseEdge: Math.round(edge * 100) / 100, version: ver };
+          this.nextEconomics = { ...this.economics };
+        }
         this.balance = data.balance;
         this.currency = data.currency || 'USD';
         this.isInitialized = true;
+        break;
+      }
+
+      case 'BETADRiX_ECONOMICS_UPDATE': {
+        if (!data.economics) return;
+        const edge = data.economics.houseEdge;
+        const ver = data.economics.version;
+        if (typeof edge !== 'number' || isNaN(edge) || !isFinite(edge) || edge < 0 || edge > 50) return;
+        if (typeof ver !== 'number' || !Number.isInteger(ver) || ver <= 0) return;
+        this.nextEconomics = { houseEdge: Math.round(edge * 100) / 100, version: ver };
         break;
       }
 
@@ -505,6 +523,45 @@ assert.strictEqual(reconnected.balance, 2000.00);
 assert.strictEqual(reconnected.isInitialized, true);
 console.log('PASSED: Clean reconnect verified.\n');
 
+// TEST 11: Handshake with Economics Payload
+console.log('--- TEST 11: Economics Payload Handshake & Validation ---');
+const econTrader = new MockEmbeddedTrader();
+econTrader.mount();
+// Send invalid economics (negative edge)
+econTrader.receiveMessage('https://demo-m4tn.onrender.com', {
+  type: 'BETADRiX_TRADER_INIT',
+  balance: 1000.00,
+  currency: 'USD',
+  economics: { houseEdge: -5.00, version: 1 },
+});
+assert.strictEqual(econTrader.isInitialized, false, 'Invalid negative economics must not initialize');
+
+// Send valid economics
+econTrader.receiveMessage('https://demo-m4tn.onrender.com', {
+  type: 'BETADRiX_TRADER_INIT',
+  balance: 1000.00,
+  currency: 'USD',
+  economics: { houseEdge: 4.50, version: 1 },
+});
+assert.strictEqual(econTrader.isInitialized, true, 'Valid economics initializes trader');
+assert.strictEqual(econTrader.economics.houseEdge, 4.50);
+assert.strictEqual(econTrader.economics.version, 1);
+console.log('PASSED: Economics handshake and validation verified.\n');
+
+// TEST 12: Realtime Economics Update & Mid-Round Stability
+console.log('--- TEST 12: Realtime Economics Update & Mid-Round Stability ---');
+econTrader.receiveMessage('https://demo-m4tn.onrender.com', {
+  type: 'BETADRiX_ECONOMICS_UPDATE',
+  economics: { houseEdge: 7.25, version: 2 },
+});
+// Current round economics MUST NOT change:
+assert.strictEqual(econTrader.economics.houseEdge, 4.50, 'Active round economics must remain unchanged');
+assert.strictEqual(econTrader.economics.version, 1, 'Active round version must remain unchanged');
+// Next round economics queued:
+assert.strictEqual(econTrader.nextEconomics.houseEdge, 7.25, 'Next round receives new house edge');
+assert.strictEqual(econTrader.nextEconomics.version, 2, 'Next round receives new version');
+console.log('PASSED: Realtime economics update preserves active round and queues next round.\n');
+
 console.log('====================================================');
-console.log('ALL SINGLE-WALLET SETTLEMENT TESTS PASSED (100%)!');
+console.log('ALL SINGLE-WALLET & ECONOMICS EMBED TESTS PASSED (100%)!');
 console.log('====================================================');

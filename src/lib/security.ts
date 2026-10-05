@@ -72,3 +72,38 @@ export function getSafeTargetOrigin(detectedOrigin?: string | null): string {
   // Fallback to trusted production BETADRiX host
   return 'https://demo-m4tn.onrender.com';
 }
+
+/**
+ * Validates that house edge is a finite numeric value between 0.00% and 50.00%.
+ * Rejects negative numbers, NaN, Infinity, strings, booleans, and null/undefined.
+ * Normalizes valid numbers to 2 decimal places.
+ */
+export function validateHouseEdge(val: unknown): { valid: boolean; normalized?: number; error?: string } {
+  if (typeof val !== 'number') {
+    return { valid: false, error: 'House edge must be a numeric value.' };
+  }
+  if (Number.isNaN(val)) {
+    return { valid: false, error: 'House edge cannot be NaN.' };
+  }
+  if (!Number.isFinite(val)) {
+    return { valid: false, error: 'House edge cannot be Infinity.' };
+  }
+  if (val < 0 || val > 50) {
+    return { valid: false, error: 'House edge must be within safe range [0, 50].' };
+  }
+
+  // Normalize to 2 decimal places
+  const normalized = Math.round(val * 100) / 100;
+  return { valid: true, normalized };
+}
+
+/**
+ * Validates economics configuration version.
+ * Must be a positive integer >= 1.
+ */
+export function validateEconomicsVersion(val: unknown): { valid: boolean; normalized?: number; error?: string } {
+  if (typeof val !== 'number' || !Number.isInteger(val) || val <= 0) {
+    return { valid: false, error: 'Economics version must be a positive integer.' };
+  }
+  return { valid: true, normalized: val };
+}
